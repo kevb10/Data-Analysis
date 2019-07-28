@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 import fbprophet
 import pytrends
+import json
+from urllib.request import urlopen
 from pytrends.request import TrendReq
 
 # matplotlib pyplot for plotting
@@ -18,15 +20,17 @@ class Stocker():
     
     # Initialization requires a ticker symbol
     def __init__(self, ticker, exchange='WIKI'):
-        
         # Enforce capitalization
         ticker = ticker.upper()
         
+        # Initialize Alpha Vantage
+        self.macd_data = self.init_alpha_vantage(ticker)
+
         # Symbol is used for labeling plots
         self.symbol = ticker
         
         # Use Personal Api Key
-        # quandl.ApiConfig.api_key = 'YourKeyHere'
+        quandl.ApiConfig.api_key = 'KFpd5VontPcusGwGGfnr'
 
         # Retrieval the financial data
         try:
@@ -90,6 +94,14 @@ class Stocker():
         print('{} Stocker Initialized. Data covers {} to {}.'.format(self.symbol,
                                                                      self.min_date.date(),
                                                                      self.max_date.date()))
+
+    """
+    Alpha Vantage has a good api for technical analysis etc
+    """
+    def init_alpha_vantage(self, ticker):
+        alpha_vantage_api_key = 'YHST3SHIZZX5VRUA'
+        url = 'https://www.alphavantage.co/query?function=MACD&symbol=' + ticker + '&interval=daily&series_type=open&apikey=' + alpha_vantage_api_key
+        return json.loads(urlopen(url).read())
     
     """
     Make sure start and end dates are in the range and can be
@@ -272,8 +284,11 @@ class Stocker():
                 plt.xlabel('Date'); plt.ylabel('US $'); plt.title('%s Stock History' % self.symbol); 
                 plt.legend(prop={'size':10})
                 plt.grid(color = 'k', alpha = 0.4); 
+
+        print(stock_plot)
       
         plt.show();
+
         
     # Reset the plotting parameters to clear style formatting
     # Not sure if this should be a static method
@@ -484,7 +499,6 @@ class Stocker():
       
     # Evaluate prediction model for one year
     def evaluate_prediction(self, start_date=None, end_date=None, nshares = None):
-        
         # Default start date is one year before end of data
         # Default end date is end date of data
         if start_date is None:
@@ -511,7 +525,6 @@ class Stocker():
         
         # Merge predictions with the known values
         test = pd.merge(test, future, on = 'ds', how = 'inner')
-
         train = pd.merge(train, future, on = 'ds', how = 'inner')
         
         # Calculate the differences between consecutive measurements
@@ -583,12 +596,12 @@ class Stocker():
                        linestyles='dashed', label = 'Prediction Start')
 
             # Plot formatting
-            plt.legend(loc = 2, prop={'size': 8}); plt.xlabel('Date'); plt.ylabel('Price $');
+            plt.legend(loc = 2, prop={'size': 8}); plt.xlabel('Date'); plt.ylabel('Price $')
             plt.grid(linewidth=0.6, alpha = 0.6)
                        
             plt.title('{} Model Evaluation from {} to {}.'.format(self.symbol,
-                start_date.date(), end_date.date()));
-            plt.show();
+                start_date.date(), end_date.date()))
+            plt.show()
 
         
         # If a number of shares is specified, play the game
@@ -602,13 +615,23 @@ class Stocker():
             
             # Iterate through all the predictions and calculate profit from playing
             for i, correct in enumerate(test_pred_increase['correct']):
-                
+                # import pdb; pdb.set_trace()
+
+                current_date = test_pred_increase.ix[i, 'Date'].strftime('%Y-%m-%d')
+                macd_val = float(self.macd_data['Technical Analysis: MACD'][current_date]['MACD'])
+
                 # If we predicted up and the price goes up, we gain the difference
                 if correct == 1:
-                    prediction_profit.append(nshares * test_pred_increase.ix[i, 'real_diff'])
+                    if macd_val > 0:
+                        prediction_profit.append(nshares * test_pred_increase.ix[i, 'real_diff'])
+                    else: 
+                        prediction_profit.append(nshares * 1)
                 # If we predicted up and the price goes down, we lose the difference
                 else:
-                    prediction_profit.append(nshares * test_pred_increase.ix[i, 'real_diff'])
+                    if macd_val > 0:
+                        prediction_profit.append(nshares * test_pred_increase.ix[i, 'real_diff'])
+                    else: 
+                        prediction_profit.append(nshares * 1)
             
             test_pred_increase['pred_profit'] = prediction_profit
             
