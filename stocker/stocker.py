@@ -22,9 +22,11 @@ class Stocker():
     def __init__(self, ticker, exchange='WIKI'):
         # Enforce capitalization
         ticker = ticker.upper()
-        
+        self.alpha_vantage_api_key = 'YHST3SHIZZX5VRUA'
+
         # Initialize Alpha Vantage
-        self.macd_data = self.init_alpha_vantage(ticker)
+        self.macd_data = self.get_macd(ticker)
+        self.rsi_data = self.get_stoch_rsi(ticker)
 
         # Symbol is used for labeling plots
         self.symbol = ticker
@@ -96,11 +98,25 @@ class Stocker():
                                                                      self.max_date.date()))
 
     """
-    Alpha Vantage has a good api for technical analysis etc
+    MACD daily, close
     """
-    def init_alpha_vantage(self, ticker):
-        alpha_vantage_api_key = 'YHST3SHIZZX5VRUA'
-        url = 'https://www.alphavantage.co/query?function=MACD&symbol=' + ticker + '&interval=daily&series_type=open&apikey=' + alpha_vantage_api_key
+    def get_macd(self, ticker):
+        url = ('https://www.alphavantage.co/query?function=MACD&symbol=' + 
+        ticker + 
+        '&interval=daily&series_type=close&apikey=' + 
+        self.alpha_vantage_api_key)
+
+        return json.loads(urlopen(url).read())
+
+    """
+    Stoch RSI daily, close, period 200, fast k 14, fast d, 14
+    """
+    def get_stoch_rsi(self, ticker):
+        url = ('https://www.alphavantage.co/query?function=STOCHRSI&symbol=' + 
+        ticker + 
+        '&interval=daily&time_period=200&series_type=close&fastkperiod=14&fastdperiod=14&fastdmatype=1&apikey=' + 
+        self.alpha_vantage_api_key)
+
         return json.loads(urlopen(url).read())
     
     """
@@ -275,19 +291,19 @@ class Stocker():
 
                 plt.xlabel('Date'); plt.ylabel('Change Relative to Average (%)'); plt.title('%s Stock History' % self.symbol); 
                 plt.legend(prop={'size':10})
-                plt.grid(color = 'k', alpha = 0.4); 
+                plt.grid(color = 'k', alpha = 0.4)
 
             # Stat y-axis
             elif plot_type == 'basic':
-                plt.style.use('fivethirtyeight');
+                plt.style.use('fivethirtyeight')
                 plt.plot(stock_plot['Date'], stock_plot[stat], color = colors[i], linewidth = 3, label = stat, alpha = 0.8)
                 plt.xlabel('Date'); plt.ylabel('US $'); plt.title('%s Stock History' % self.symbol); 
                 plt.legend(prop={'size':10})
-                plt.grid(color = 'k', alpha = 0.4); 
+                plt.grid(color = 'k', alpha = 0.4)
 
         print(stock_plot)
       
-        plt.show();
+        plt.show()
 
         
     # Reset the plotting parameters to clear style formatting
@@ -614,23 +630,21 @@ class Stocker():
             prediction_profit = []
             
             # Iterate through all the predictions and calculate profit from playing
-            for i, correct in enumerate(test_pred_increase['correct']):
+            for i, date in enumerate(test_pred_increase['Date']):
                 # import pdb; pdb.set_trace()
 
-                current_date = test_pred_increase.ix[i, 'Date'].strftime('%Y-%m-%d')
+                current_date = date.strftime('%Y-%m-%d')
                 macd_val = float(self.macd_data['Technical Analysis: MACD'][current_date]['MACD'])
+                rsi_val = float(self.rsi_data['Technical Analysis: STOCHRSI'][current_date]['FastD'])
 
                 # If we predicted up and the price goes up, we gain the difference
-                if correct == 1:
-                    if macd_val > 0:
-                        prediction_profit.append(nshares * test_pred_increase.ix[i, 'real_diff'])
-                    else: 
-                        prediction_profit.append(nshares * 1)
                 # If we predicted up and the price goes down, we lose the difference
-                else:
-                    if macd_val > 0:
+                if macd_val > 0:
+                    prediction_profit.append(nshares * test_pred_increase.ix[i, 'real_diff'])
+                else: 
+                    if rsi_val > 20:
                         prediction_profit.append(nshares * test_pred_increase.ix[i, 'real_diff'])
-                    else: 
+                    else:
                         prediction_profit.append(nshares * 1)
             
             test_pred_increase['pred_profit'] = prediction_profit
