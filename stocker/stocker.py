@@ -33,6 +33,7 @@ class Stocker():
         # Retrieval the financial data
         try:
             stock = self.get_stock(ticker)
+            import pdb; pdb.set_trace()
         
         except Exception as e:
             print('Error Retrieving Data.')
