@@ -1,6 +1,5 @@
 # Quandl for financial analysis, pandas and numpy for data manipulation
 # fbprophet for additive models, #pytrends for Google trend data
-import quandl
 import pandas as pd
 import numpy as np
 import fbprophet
@@ -30,28 +29,25 @@ class Stocker():
 
         # Symbol is used for labeling plots
         self.symbol = ticker
-        
-        # Use Personal Api Key
-        quandl.ApiConfig.api_key = 'KFpd5VontPcusGwGGfnr'
 
         # Retrieval the financial data
         try:
-            stock = quandl.get('%s/%s' % (exchange, ticker))
+            stock = self.get_stock(ticker)
         
         except Exception as e:
             print('Error Retrieving Data.')
             print(e)
             return
         
-        # Set the index to a column called Date
+        # Set the index to a column called timestamp
         stock = stock.reset_index(level=0)
         
         # Columns required for prophet
-        stock['ds'] = stock['Date']
+        stock['ds'] = stock['timestamp']
 
         if ('Adj. Close' not in stock.columns):
-            stock['Adj. Close'] = stock['Close']
-            stock['Adj. Open'] = stock['Open']
+            stock['Adj. Close'] = stock['close']
+            stock['Adj. Open'] = stock['open']
         
         stock['y'] = stock['Adj. Close']
         stock['Daily Change'] = stock['Adj. Close'] - stock['Adj. Open']
@@ -60,16 +56,16 @@ class Stocker():
         self.stock = stock.copy()
         
         # Minimum and maximum date in range
-        self.min_date = min(stock['Date'])
-        self.max_date = max(stock['Date'])
+        self.min_date = min(stock['timestamp'])
+        self.max_date = max(stock['timestamp'])
         
         # Find max and min prices and dates on which they occurred
         self.max_price = np.max(self.stock['y'])
         self.min_price = np.min(self.stock['y'])
         
-        self.min_price_date = self.stock[self.stock['y'] == self.min_price]['Date']
+        self.min_price_date = self.stock[self.stock['y'] == self.min_price]['timestamp']
         self.min_price_date = self.min_price_date[self.min_price_date.index[0]]
-        self.max_price_date = self.stock[self.stock['y'] == self.max_price]['Date']
+        self.max_price_date = self.stock[self.stock['y'] == self.max_price]['timestamp']
         self.max_price_date = self.max_price_date[self.max_price_date.index[0]]
         
         # The starting price (starting with the opening price)
@@ -118,6 +114,17 @@ class Stocker():
         self.alpha_vantage_api_key)
 
         return json.loads(urlopen(url).read())
+
+    """
+    Fetch stock data
+    """
+    def get_stock(self, ticker):
+        url = ('https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=' +
+        ticker + 
+        '&apikey=' + self.alpha_vantage_api_key + 
+        '&outputsize=full&datatype=csv')
+
+        return json.loads(pd.read_csv(url))
     
     """
     Make sure start and end dates are in the range and can be
@@ -151,7 +158,7 @@ class Stocker():
             valid_start = True
             
             if end_date.date() < start_date.date():
-                print('End Date must be later than start date.')
+                print('End timestamp must be later than start date.')
                 start_date = pd.to_datetime(input('Enter a new start date: '))
                 end_date= pd.to_datetime(input('Enter a new end date: '))
                 valid_end = False
@@ -159,12 +166,12 @@ class Stocker():
             
             else: 
                 if end_date.date() > self.max_date.date():
-                    print('End Date exceeds data range')
+                    print('End timestamp exceeds data range')
                     end_date= pd.to_datetime(input('Enter a new end date: '))
                     valid_end = False
 
                 if start_date.date() < self.min_date.date():
-                    print('Start Date is before date range')
+                    print('Start timestamp is before date range')
                     start_date = pd.to_datetime(input('Enter a new start date: '))
                     valid_start = False
                 
@@ -190,30 +197,30 @@ class Stocker():
         # If user wants to round dates (default behavior)
         if self.round_dates:
             # Record if start and end date are in df
-            if (start_date not in list(df['Date'])):
+            if (start_date not in list(df['timestamp'])):
                 start_in = False
-            if (end_date not in list(df['Date'])):
+            if (end_date not in list(df['timestamp'])):
                 end_in = False
 
             # If both are not in dataframe, round both
             if (not end_in) & (not start_in):
-                trim_df = df[(df['Date'] >= start_date.date()) & 
-                             (df['Date'] <= end_date.date())]
+                trim_df = df[(df['timestamp'] >= start_date.date()) & 
+                             (df['timestamp'] <= end_date.date())]
             
             else:
                 # If both are in dataframe, round neither
                 if (end_in) & (start_in):
-                    trim_df = df[(df['Date'] >= start_date.date()) & 
-                                 (df['Date'] <= end_date.date())]
+                    trim_df = df[(df['timestamp'] >= start_date.date()) & 
+                                 (df['timestamp'] <= end_date.date())]
                 else:
                     # If only start is missing, round start
                     if (not start_in):
-                        trim_df = df[(df['Date'] > start_date.date()) & 
-                                     (df['Date'] <= end_date.date())]
+                        trim_df = df[(df['timestamp'] > start_date.date()) & 
+                                     (df['timestamp'] <= end_date.date())]
                     # If only end is imssing round end
                     elif (not end_in):
-                        trim_df = df[(df['Date'] >= start_date.date()) & 
-                                     (df['Date'] < end_date.date())]
+                        trim_df = df[(df['timestamp'] >= start_date.date()) & 
+                                     (df['timestamp'] < end_date.date())]
 
         
         else:
@@ -223,23 +230,23 @@ class Stocker():
                 start_date, end_date = self.handle_dates(start_date, end_date)
                 
                 # No round dates, if either data not in, print message and return
-                if (start_date in list(df['Date'])):
+                if (start_date in list(df['timestamp'])):
                     valid_start = True
-                if (end_date in list(df['Date'])):
+                if (end_date in list(df['timestamp'])):
                     valid_end = True
                     
                 # Check to make sure dates are in the data
-                if (start_date not in list(df['Date'])):
-                    print('Start Date not in data (either out of range or not a trading day.)')
+                if (start_date not in list(df['timestamp'])):
+                    print('Start timestamp not in data (either out of range or not a trading day.)')
                     start_date = pd.to_datetime(input(prompt='Enter a new start date: '))
                     
-                elif (end_date not in list(df['Date'])):
-                    print('End Date not in data (either out of range or not a trading day.)')
+                elif (end_date not in list(df['timestamp'])):
+                    print('End timestamp not in data (either out of range or not a trading day.)')
                     end_date = pd.to_datetime(input(prompt='Enter a new end date: ') )
 
             # Dates are not rounded
-            trim_df = df[(df['Date'] >= start_date.date()) & 
-                         (df['Date'] <= end_date.date())]
+            trim_df = df[(df['timestamp'] >= start_date.date()) & 
+                         (df['timestamp'] <= end_date.date())]
 
         
             
@@ -267,9 +274,9 @@ class Stocker():
 
             stat_avg = np.mean(stock_plot[stat])
             
-            date_stat_min = stock_plot[stock_plot[stat] == stat_min]['Date']
+            date_stat_min = stock_plot[stock_plot[stat] == stat_min]['timestamp']
             date_stat_min = date_stat_min[date_stat_min.index[0]].date()
-            date_stat_max = stock_plot[stock_plot[stat] == stat_max]['Date']
+            date_stat_max = stock_plot[stock_plot[stat] == stat_max]['timestamp']
             date_stat_max = date_stat_max[date_stat_max.index[0]].date()
             
             print('Maximum {} = {:.2f} on {}.'.format(stat, stat_max, date_stat_max))
@@ -281,23 +288,23 @@ class Stocker():
                 # Simple Plot 
                 plt.style.use('fivethirtyeight');
                 if stat == 'Daily Change':
-                    plt.plot(stock_plot['Date'], 100 * stock_plot[stat],
+                    plt.plot(stock_plot['timestamp'], 100 * stock_plot[stat],
                          color = colors[i], linewidth = 2.4, alpha = 0.9,
                          label = stat)
                 else:
-                    plt.plot(stock_plot['Date'], 100 * (stock_plot[stat] -  stat_avg) / stat_avg,
+                    plt.plot(stock_plot['timestamp'], 100 * (stock_plot[stat] -  stat_avg) / stat_avg,
                          color = colors[i], linewidth = 2.4, alpha = 0.9,
                          label = stat)
 
-                plt.xlabel('Date'); plt.ylabel('Change Relative to Average (%)'); plt.title('%s Stock History' % self.symbol); 
+                plt.xlabel('timestamp'); plt.ylabel('Change Relative to Average (%)'); plt.title('%s Stock History' % self.symbol); 
                 plt.legend(prop={'size':10})
                 plt.grid(color = 'k', alpha = 0.4)
 
             # Stat y-axis
             elif plot_type == 'basic':
                 plt.style.use('fivethirtyeight')
-                plt.plot(stock_plot['Date'], stock_plot[stat], color = colors[i], linewidth = 3, label = stat, alpha = 0.8)
-                plt.xlabel('Date'); plt.ylabel('US $'); plt.title('%s Stock History' % self.symbol); 
+                plt.plot(stock_plot['timestamp'], stock_plot[stat], color = colors[i], linewidth = 3, label = stat, alpha = 0.8)
+                plt.xlabel('timestamp'); plt.ylabel('US $'); plt.title('%s Stock History' % self.symbol); 
                 plt.legend(prop={'size':10})
                 plt.grid(color = 'k', alpha = 0.4)
 
@@ -359,8 +366,8 @@ class Stocker():
         start_date, end_date = self.handle_dates(start_date, end_date)
             
         # Find starting and ending price of stock
-        start_price = float(self.stock[self.stock['Date'] == start_date]['Adj. Open'])
-        end_price = float(self.stock[self.stock['Date'] == end_date]['Adj. Close'])
+        start_price = float(self.stock[self.stock['timestamp'] == start_date]['Adj. Open'])
+        end_price = float(self.stock[self.stock['timestamp'] == end_date]['Adj. Close'])
         
         # Make a profit dataframe and calculate profit column
         profits = self.make_df(start_date, end_date)
@@ -379,8 +386,8 @@ class Stocker():
         text_location = (end_date - pd.DateOffset(months = 1)).date()
         
         # Plot the profits over time
-        plt.plot(profits['Date'], profits['hold_profit'], 'b', linewidth = 3)
-        plt.ylabel('Profit ($)'); plt.xlabel('Date'); plt.title('Buy and Hold Profits for {} {} to {}'.format(
+        plt.plot(profits['timestamp'], profits['hold_profit'], 'b', linewidth = 3)
+        plt.ylabel('Profit ($)'); plt.xlabel('timestamp'); plt.title('Buy and Hold Profits for {} {} to {}'.format(
                                                                 self.symbol, start_date.date(), end_date.date()))
         
         # Display final value on graph
@@ -413,7 +420,7 @@ class Stocker():
     def changepoint_prior_analysis(self, changepoint_priors=[0.001, 0.05, 0.1, 0.2], colors=['b', 'r', 'grey', 'gold']):
     
         # Training and plotting with specified years of data
-        train = self.stock[(self.stock['Date'] > (max(self.stock['Date']) - pd.DateOffset(years=self.training_years)).date())]
+        train = self.stock[(self.stock['timestamp'] > (max(self.stock['timestamp']) - pd.DateOffset(years=self.training_years)).date())]
         
         # Iterate through all the changepoints and make models
         for i, prior in enumerate(changepoint_priors):
@@ -461,7 +468,7 @@ class Stocker():
                             
         # Plot labels
         plt.legend(loc = 2, prop={'size': 10})
-        plt.xlabel('Date'); plt.ylabel('Stock Price ($)'); plt.title('Effect of Changepoint Prior Scale');
+        plt.xlabel('timestamp'); plt.ylabel('Stock Price ($)'); plt.title('Effect of Changepoint Prior Scale');
         plt.show()
             
     # Basic prophet model for specified number of days  
@@ -472,7 +479,7 @@ class Stocker():
         model = self.create_model()
         
         # Fit on the stock history for self.training_years number of years
-        stock_history = self.stock[self.stock['Date'] > (self.max_date - pd.DateOffset(years = self.training_years)).date()]
+        stock_history = self.stock[self.stock['timestamp'] > (self.max_date - pd.DateOffset(years = self.training_years)).date()]
         
         if resample:
             stock_history = self.resample(stock_history)
@@ -506,7 +513,7 @@ class Stocker():
                        facecolor = 'g', edgecolor = 'k', linewidth = 1.4, label = 'Confidence Interval')
 
         # Plot formatting
-        plt.legend(loc = 2, prop={'size': 10}); plt.xlabel('Date'); plt.ylabel('Price $');
+        plt.legend(loc = 2, prop={'size': 10}); plt.xlabel('timestamp'); plt.ylabel('Price $');
         plt.grid(linewidth=0.6, alpha = 0.6)
         plt.title(title);
         plt.show()
@@ -525,11 +532,11 @@ class Stocker():
         start_date, end_date = self.handle_dates(start_date, end_date)
         
         # Training data starts self.training_years years before start date and goes up to start date
-        train = self.stock[(self.stock['Date'] < start_date.date()) & 
-                           (self.stock['Date'] > (start_date - pd.DateOffset(years=self.training_years)).date())]
+        train = self.stock[(self.stock['timestamp'] < start_date.date()) & 
+                           (self.stock['timestamp'] > (start_date - pd.DateOffset(years=self.training_years)).date())]
         
         # Testing data is specified in the range
-        test = self.stock[(self.stock['Date'] >= start_date.date()) & (self.stock['Date'] <= end_date.date())]
+        test = self.stock[(self.stock['timestamp'] >= start_date.date()) & (self.stock['timestamp'] <= end_date.date())]
         
         # Create and train the model
         model = self.create_model()
@@ -572,7 +579,7 @@ class Stocker():
 
         if not nshares:
 
-            # Date range of predictions
+            # timestamp range of predictions
             print('\nPrediction Range: {} to {}.'.format(start_date.date(),
                 end_date.date()))
 
@@ -612,7 +619,7 @@ class Stocker():
                        linestyles='dashed', label = 'Prediction Start')
 
             # Plot formatting
-            plt.legend(loc = 2, prop={'size': 8}); plt.xlabel('Date'); plt.ylabel('Price $')
+            plt.legend(loc = 2, prop={'size': 8}); plt.xlabel('timestamp'); plt.ylabel('Price $')
             plt.grid(linewidth=0.6, alpha = 0.6)
                        
             plt.title('{} Model Evaluation from {} to {}.'.format(self.symbol,
@@ -630,7 +637,7 @@ class Stocker():
             prediction_profit = []
             
             # Iterate through all the predictions and calculate profit from playing
-            for i, date in enumerate(test_pred_increase['Date']):
+            for i, date in enumerate(test_pred_increase['timestamp']):
                 # import pdb; pdb.set_trace()
 
                 current_date = date.strftime('%Y-%m-%d')
@@ -707,7 +714,7 @@ class Stocker():
                     size = 18);
 
             # Plot formatting
-            plt.ylabel('Profit  (US $)'); plt.xlabel('Date'); 
+            plt.ylabel('Profit  (US $)'); plt.xlabel('timestamp'); 
             plt.title('Predicted versus Buy and Hold Profits');
             plt.legend(loc = 2, prop={'size': 10});
             plt.grid(alpha=0.2); 
@@ -742,7 +749,7 @@ class Stocker():
         model = self.create_model()
         
         # Use past self.training_years years of data
-        train = self.stock[self.stock['Date'] > (self.max_date - pd.DateOffset(years = self.training_years)).date()]
+        train = self.stock[self.stock['timestamp'] > (self.max_date - pd.DateOffset(years = self.training_years)).date()]
         model.fit(train)
         
         # Predictions of the training data (no future periods)
@@ -779,7 +786,7 @@ class Stocker():
         if not search:
         
             print('\nChangepoints sorted by slope rate of change (2nd derivative):\n')
-            print(c_data.ix[:, ['Date', 'Adj. Close', 'delta']][:5])
+            print(c_data.ix[:, ['timestamp', 'Adj. Close', 'delta']][:5])
 
             # Line plot showing actual values, estimated values, and changepoints
             self.reset_plot()
@@ -798,14 +805,14 @@ class Stocker():
                        linewidth= 1.2, label='Positive Changepoints')
 
             plt.legend(prop={'size':10});
-            plt.xlabel('Date'); plt.ylabel('Price ($)'); plt.title('Stock Price with Changepoints')
+            plt.xlabel('timestamp'); plt.ylabel('Price ($)'); plt.title('Stock Price with Changepoints')
             plt.show()
         
         # Search for search term in google news
         # Show related queries, rising related queries
         # Graph changepoints, search frequency, stock price
         if search:
-            date_range = ['%s %s' % (str(min(train['Date']).date()), str(max(train['Date']).date()))]
+            date_range = ['%s %s' % (str(min(train['timestamp']).date()), str(max(train['timestamp']).date()))]
 
             # Get the Google Trends for specified terms and join to training dataframe
             trends, related_queries = self.retrieve_google_trends(search, date_range)
@@ -853,14 +860,14 @@ class Stocker():
 
             # Plot formatting
             plt.legend(prop={'size': 10})
-            plt.xlabel('Date'); plt.ylabel('Normalized Values'); plt.title('%s Stock Price and Search Frequency for %s' % (self.symbol, search))
+            plt.xlabel('timestamp'); plt.ylabel('Normalized Values'); plt.title('%s Stock Price and Search Frequency for %s' % (self.symbol, search))
             plt.show()
         
     # Predict the future price for a given range of days
     def predict_future(self, days=30):
         
         # Use past self.training_years years for training
-        train = self.stock[self.stock['Date'] > (max(self.stock['Date']) - pd.DateOffset(years=self.training_years)).date()]
+        train = self.stock[self.stock['timestamp'] > (max(self.stock['timestamp']) - pd.DateOffset(years=self.training_years)).date()]
         
         model = self.create_model()
         
@@ -871,7 +878,7 @@ class Stocker():
         future = model.predict(future)
         
         # Only concerned with future dates
-        future = future[future['ds'] >= max(self.stock['Date']).date()]
+        future = future[future['ds'] >= max(self.stock['timestamp']).date()]
         
         # Remove the weekends
         future = self.remove_weekends(future)
@@ -885,7 +892,7 @@ class Stocker():
         future['direction'] = (future['diff'] > 0) * 1
         
         # Rename the columns for presentation
-        future = future.rename(columns={'ds': 'Date', 'yhat': 'estimate', 'diff': 'change', 
+        future = future.rename(columns={'ds': 'timestamp', 'yhat': 'estimate', 'diff': 'change', 
                                         'yhat_upper': 'upper', 'yhat_lower': 'lower'})
         
         future_increase = future[future['direction'] == 1]
@@ -893,10 +900,10 @@ class Stocker():
         
         # Print out the dates
         print('\nPredicted Increase: \n')
-        print(future_increase[['Date', 'estimate', 'change', 'upper', 'lower']])
+        print(future_increase[['timestamp', 'estimate', 'change', 'upper', 'lower']])
         
         print('\nPredicted Decrease: \n')
-        print(future_decrease[['Date', 'estimate', 'change', 'upper', 'lower']])
+        print(future_decrease[['timestamp', 'estimate', 'change', 'upper', 'lower']])
         
         self.reset_plot()
         
@@ -911,11 +918,11 @@ class Stocker():
         fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 
         # Plot the estimates
-        ax.plot(future_increase['Date'], future_increase['estimate'], 'g^', ms = 12, label = 'Pred. Increase')
-        ax.plot(future_decrease['Date'], future_decrease['estimate'], 'rv', ms = 12, label = 'Pred. Decrease')
+        ax.plot(future_increase['timestamp'], future_increase['estimate'], 'g^', ms = 12, label = 'Pred. Increase')
+        ax.plot(future_decrease['timestamp'], future_decrease['estimate'], 'rv', ms = 12, label = 'Pred. Decrease')
 
         # Plot errorbars
-        ax.errorbar(future['Date'].dt.to_pydatetime(), future['estimate'], 
+        ax.errorbar(future['timestamp'].dt.to_pydatetime(), future['estimate'], 
                     yerr = future['upper'] - future['lower'], 
                     capthick=1.4, color = 'k',linewidth = 2,
                    ecolor='darkblue', capsize = 4, elinewidth = 1, label = 'Pred with Range')
@@ -924,7 +931,7 @@ class Stocker():
         plt.legend(loc = 2, prop={'size': 10});
         plt.xticks(rotation = '45')
         plt.ylabel('Predicted Stock Price (US $)');
-        plt.xlabel('Date'); plt.title('Predictions for %s' % self.symbol);
+        plt.xlabel('timestamp'); plt.title('Predictions for %s' % self.symbol);
         plt.show()
         
     def changepoint_prior_validation(self, start_date=None, end_date=None,changepoint_priors = [0.001, 0.05, 0.1, 0.2]):
@@ -944,19 +951,19 @@ class Stocker():
         start_date, end_date = self.handle_dates(start_date, end_date)
                                
         # Select self.training_years number of years
-        train = self.stock[(self.stock['Date'] > (start_date - pd.DateOffset(years=self.training_years)).date()) & 
-        (self.stock['Date'] < start_date.date())]
+        train = self.stock[(self.stock['timestamp'] > (start_date - pd.DateOffset(years=self.training_years)).date()) & 
+        (self.stock['timestamp'] < start_date.date())]
         
         # Testing data is specified by range
-        test = self.stock[(self.stock['Date'] >= start_date.date()) & (self.stock['Date'] <= end_date.date())]
+        test = self.stock[(self.stock['timestamp'] >= start_date.date()) & (self.stock['timestamp'] <= end_date.date())]
 
-        eval_days = (max(test['Date']).date() - min(test['Date']).date()).days
+        eval_days = (max(test['timestamp']).date() - min(test['timestamp']).date()).days
         
         results = pd.DataFrame(0, index = list(range(len(changepoint_priors))), 
             columns = ['cps', 'train_err', 'train_range', 'test_err', 'test_range'])
 
-        print('\nValidation Range {} to {}.\n'.format(min(test['Date']).date(),
-            max(test['Date']).date()))
+        print('\nValidation Range {} to {}.\n'.format(min(test['timestamp']).date(),
+            max(test['timestamp']).date()))
             
         
         # Iterate through all the changepoints and make models
